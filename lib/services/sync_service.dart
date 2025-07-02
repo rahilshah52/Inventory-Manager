@@ -4,6 +4,7 @@ import '../models/inventory_item.dart';
 import '../models/inventory_transaction.dart';
 import '../models/employee.dart';
 import 'package:intl/intl.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 class SyncService {
   static final inventoryBox = Hive.box<InventoryItem>('inventory');
@@ -25,6 +26,7 @@ class SyncService {
           'quantity': item.quantity,
           'image_url': item.imageUrl,
           'updated_at': item.updatedAt.toIso8601String(),
+          'location': item.location,
         });
       } catch (_) {}
     }
@@ -77,6 +79,7 @@ class SyncService {
                 quantity: r['quantity'],
                 imageUrl: r['image_url'],
                 updatedAt: remoteUpdated,
+                location: r['location'],
               ));
         }
       }
@@ -126,9 +129,9 @@ class SyncService {
     } catch (_) {}
   }
 
-  static bool isOnline() {
-    // TODO: Implement network check
-    return true;
+  static Future<bool> isOnline() async {
+    var result = await Connectivity().checkConnectivity();
+    return result != ConnectivityResult.none;
   }
 
   static String formatMumbaiTime(DateTime dt) {

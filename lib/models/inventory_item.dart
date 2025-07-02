@@ -19,6 +19,8 @@ class InventoryItem extends HiveObject {
   String? imageUrl;
   @HiveField(7)
   DateTime updatedAt;
+  @HiveField(8)
+  String? location;
 
   InventoryItem({
     required this.id,
@@ -29,5 +31,6 @@ class InventoryItem extends HiveObject {
     required this.quantity,
     this.imageUrl,
     required this.updatedAt,
+    this.location,
   });
 }

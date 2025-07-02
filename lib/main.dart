@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'models/inventory_item.dart';
 import 'models/inventory_transaction.dart';
 import 'models/employee.dart';
 import 'login_screen.dart';
 import 'onboarding_screen.dart';
+import 'services/sync_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,6 +46,12 @@ class _MyAppLauncherState extends State<MyAppLauncher> {
   void initState() {
     super.initState();
     _checkOnboarding();
+    // Check if online at start, then sync
+    SyncService.isOnline().then((online) {
+      if (online) {
+        SyncService.syncAll();
+      }
+    });
   }
 
   Future<void> _checkOnboarding() async {
@@ -59,8 +66,10 @@ class _MyAppLauncherState extends State<MyAppLauncher> {
   Future<void> _finishOnboarding() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('onboarding_seen', true);
-    setState(() {
-      _showOnboarding = false;
+    SyncService.isOnline().then((online) {
+      if (online) {
+        SyncService.syncAll();
+      }
     });
   }
 

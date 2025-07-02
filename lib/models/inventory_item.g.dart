@@ -25,13 +25,14 @@ class InventoryItemAdapter extends TypeAdapter<InventoryItem> {
       quantity: fields[5] as int,
       imageUrl: fields[6] as String?,
       updatedAt: fields[7] as DateTime,
+      location: fields[8] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, InventoryItem obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -47,7 +48,9 @@ class InventoryItemAdapter extends TypeAdapter<InventoryItem> {
       ..writeByte(6)
       ..write(obj.imageUrl)
       ..writeByte(7)
-      ..write(obj.updatedAt);
+      ..write(obj.updatedAt)
+      ..writeByte(8)
+      ..write(obj.location);
   }
 
   @override
