@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'dart:async'; // <--- Add this import
 import 'models/inventory_item.dart';
 import 'models/inventory_transaction.dart';
 import 'models/employee.dart';
@@ -25,7 +26,7 @@ void main() async {
   await Supabase.initialize(
     url: 'https://elmupuxvzoeywkfdqsmy.supabase.co',
     anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsbXVwdXh2em9leXdrZmRxc215Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEzMTEwMDMsImV4cCI6MjA2Njg4NzAwM30.fGFKIF7EjnE14-REIzWVq7DUgE1-toRHz_lodEq5C0o',
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsbXVwdXh2em9leXdrZmRxc215Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEzMTEwMDMsImV4cCI6MjA2Njg4NzAwM30.fGFKIF7EjnE14-REIzWVq7[...]',
   );
 
   runApp(MyAppLauncher());
@@ -41,6 +42,7 @@ class MyAppLauncher extends StatefulWidget {
 class _MyAppLauncherState extends State<MyAppLauncher> {
   bool _showOnboarding = false;
   bool _loading = true;
+  late final StreamSubscription _connectivitySubscription; // <--- Add this line
 
   @override
   void initState() {
@@ -52,6 +54,19 @@ class _MyAppLauncherState extends State<MyAppLauncher> {
         SyncService.syncAll();
       }
     });
+    // Listen for connectivity changes and sync when back online
+    _connectivitySubscription =
+        Connectivity().onConnectivityChanged.listen((result) {
+      if (result != ConnectivityResult.none) {
+        SyncService.syncAll();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _connectivitySubscription.cancel(); // <--- Add this line
+    super.dispose();
   }
 
   Future<void> _checkOnboarding() async {
