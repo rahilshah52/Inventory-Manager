@@ -7,8 +7,6 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:hive/hive.dart';
 import 'models/inventory_item.dart';
-// If you have a CloudinaryService, import it here
-// import 'cloudinary_service.dart';
 
 // Temporary CloudinaryService implementation for image upload
 class CloudinaryService {
@@ -33,190 +31,74 @@ class _AddEditInventoryScreenState extends State<AddEditInventoryScreen> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
   late TextEditingController _skuController;
-  late TextEditingController _pcsController;
-  late TextEditingController _boxesController;
-  late TextEditingController _quantityController;
+  late TextEditingController _conversionController;
   String? _imageUrl;
   Uint8List? _webImageBytes; // For web image preview
   bool _isUploading = false;
   bool _isSaving = false;
+
+  int _quantityValue = 0;
+  String _unit = 'pcs'; // default
+  int _conversionFactor = 10; // default
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.item?['name'] ?? '');
     _skuController = TextEditingController(text: widget.item?['sku'] ?? '');
-    _pcsController =
-        TextEditingController(text: widget.item?['pcs']?.toString() ?? '0');
-    _boxesController =
-        TextEditingController(text: widget.item?['boxes']?.toString() ?? '0');
-    _quantityController = TextEditingController(
-        text: widget.item?['quantity']?.toString() ?? '0');
+    _conversionController = TextEditingController(
+      text: widget.item?['conversion_factor']?.toString() ?? '10',
+    );
+
+    // If editing, try to prefill the quantity/unit based on existing data
+    final pcs = widget.item?['pcs'] ?? 0;
+    final boxes = widget.item?['boxes'] ?? 0;
+    if (boxes != null && boxes > 0) {
+      _quantityValue = boxes;
+      _unit = 'boxes';
+    } else if (pcs != null && pcs > 0) {
+      _quantityValue = pcs;
+      _unit = 'pcs';
+    } else {
+      _quantityValue = 0;
+      _unit = 'pcs';
+    }
     _imageUrl = widget.item?['image_url'];
+    _conversionFactor = int.tryParse(_conversionController.text) ?? 10;
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _skuController.dispose();
-    _pcsController.dispose();
-    _boxesController.dispose();
-    _quantityController.dispose();
+    _conversionController.dispose();
     super.dispose();
   }
 
   Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final source = await showDialog<ImageSource>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Select Image Source'),
-        actions: [
-          TextButton.icon(
-            icon: const Icon(Icons.photo_library),
-            label: const Text('Gallery'),
-            onPressed: () => Navigator.of(context).pop(ImageSource.gallery),
-          ),
-          TextButton.icon(
-            icon: const Icon(Icons.camera_alt),
-            label: const Text('Camera'),
-            onPressed: () => Navigator.of(context).pop(ImageSource.camera),
-          ),
-        ],
-      ),
-    );
-
-    if (source == null) return;
-
-    final pickedFile = await picker.pickImage(source: source);
-
-    if (pickedFile != null) {
-      if (kIsWeb) {
+    if (kIsWeb) {
+      final ImagePicker picker = ImagePicker();
+      final XFile? pickedFile =
+          await picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile != null) {
         final bytes = await pickedFile.readAsBytes();
         setState(() {
           _webImageBytes = bytes;
         });
-        // TODO: Implement web upload logic if needed
-      } else {
+        // Upload logic for web can be added here
+      }
+    } else {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile != null) {
         setState(() {
           _isUploading = true;
         });
-        final File imageFile = File(pickedFile.path);
-        try {
-          final imageUrl = await CloudinaryService.uploadImage(imageFile);
-          if (imageUrl != null) {
-            setState(() {
-              _imageUrl = imageUrl;
-            });
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                  content: Text("Image upload failed. Please try again.")),
-            );
-          }
-        } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error uploading image: $e')),
-          );
-        } finally {
-          setState(() {
-            _isUploading = false;
-          });
-        }
-      }
-    }
-  }
-
-  Future<void> _saveItem() async {
-    final client = Supabase.instance.client;
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isSaving = true;
-      });
-      final name = _nameController.text.trim();
-      final sku = _skuController.text.trim();
-      final pcs = int.tryParse(_pcsController.text.trim()) ?? 0;
-      final boxes = int.tryParse(_boxesController.text.trim()) ?? 0;
-      final quantity = int.tryParse(_quantityController.text.trim()) ?? 0;
-      try {
-        // 1. Write to Supabase
-        Map<String, dynamic> supabaseItem = {
-          'name': name,
-          'sku': sku,
-          'pcs': pcs,
-          'boxes': boxes,
-          'quantity': quantity,
-          'image_url': _imageUrl,
-        };
-        dynamic insertedOrUpdated;
-        if (widget.item == null) {
-          final response = await client
-              .from('inventory_items')
-              .insert(supabaseItem)
-              .select()
-              .single();
-          insertedOrUpdated = response;
-          setState(() {
-            _nameController.clear();
-            _skuController.clear();
-            _pcsController.clear();
-            _boxesController.clear();
-            _quantityController.text = '0';
-            _imageUrl = null;
-            _webImageBytes = null;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Item added successfully!')),
-          );
-        } else {
-          final response = await client
-              .from('inventory_items')
-              .update(supabaseItem)
-              .eq('id', widget.item!['id'])
-              .select()
-              .single();
-          insertedOrUpdated = response;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Item updated successfully!')),
-          );
-        }
-
-        // 2. Write to Hive
-        if (insertedOrUpdated != null) {
-          // Import Hive and InventoryItem at the top if not already
-          // import 'package:hive/hive.dart';
-          // import 'models/inventory_item.dart';
-          final inventoryBox = await Hive.openBox<InventoryItem>('inventory');
-          final itemId =
-              insertedOrUpdated['id']?.toString() ?? UniqueKey().toString();
-          final hiveItem = InventoryItem(
-            id: itemId,
-            name: name,
-            sku: sku,
-            pcs: pcs,
-            boxes: boxes,
-            quantity: quantity,
-            imageUrl: _imageUrl,
-            updatedAt: DateTime.now(),
-          );
-          // If updating, find and update; else, add
-          final existingIndex =
-              inventoryBox.values.toList().indexWhere((i) => i.id == itemId);
-          if (existingIndex != -1) {
-            final key = inventoryBox.keyAt(existingIndex);
-            await inventoryBox.put(key, hiveItem);
-          } else {
-            await inventoryBox.add(hiveItem);
-          }
-        }
-        Navigator.of(context).pop(true);
-      } catch (error) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving item: $error')),
-        );
-      } finally {
+        final imageUrl =
+            await CloudinaryService.uploadImage(File(pickedFile.path));
         setState(() {
-          _isSaving = false;
+          _imageUrl = imageUrl;
+          _isUploading = false;
         });
       }
     }
@@ -234,6 +116,113 @@ class _AddEditInventoryScreenState extends State<AddEditInventoryScreen> {
         alignment: Alignment.center,
         child: const Text('No image selected'),
       );
+    }
+  }
+
+  Future<void> _saveItem() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    final client = Supabase.instance.client;
+    final name = _nameController.text.trim();
+    final sku = _skuController.text.trim();
+
+    final conversionFactor =
+        int.tryParse(_conversionController.text.trim()) ?? 1;
+    int pcs = 0;
+    int boxes = 0;
+    int totalQuantity = 0;
+
+    if (_unit == 'pcs') {
+      pcs = _quantityValue;
+      boxes = 0;
+      totalQuantity = pcs;
+    } else if (_unit == 'boxes') {
+      boxes = _quantityValue;
+      pcs = 0;
+      totalQuantity = boxes * conversionFactor;
+    }
+
+    try {
+      // 1. Write to Supabase
+      Map<String, dynamic> supabaseItem = {
+        'name': name,
+        'sku': sku,
+        'pcs': pcs,
+        'boxes': boxes,
+        'quantity': totalQuantity,
+        'conversion_factor': conversionFactor,
+        'image_url': _imageUrl,
+      };
+      dynamic insertedOrUpdated;
+      if (widget.item == null) {
+        final response = await client
+            .from('inventory_items')
+            .insert(supabaseItem)
+            .select()
+            .single();
+        insertedOrUpdated = response;
+        setState(() {
+          _nameController.clear();
+          _skuController.clear();
+          _conversionController.text = '10';
+          _quantityValue = 0;
+          _unit = 'pcs';
+          _imageUrl = null;
+          _webImageBytes = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Item added successfully!')),
+        );
+      } else {
+        final response = await client
+            .from('inventory_items')
+            .update(supabaseItem)
+            .eq('id', widget.item!['id'])
+            .select()
+            .single();
+        insertedOrUpdated = response;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Item updated successfully!')),
+        );
+      }
+
+      // 2. Write to Hive
+      if (insertedOrUpdated != null) {
+        final inventoryBox = await Hive.openBox<InventoryItem>('inventory');
+        final itemId =
+            insertedOrUpdated['id']?.toString() ?? UniqueKey().toString();
+        final hiveItem = InventoryItem(
+          id: itemId,
+          name: name,
+          sku: sku,
+          pcs: pcs,
+          boxes: boxes,
+          quantity: totalQuantity,
+          imageUrl: _imageUrl,
+          updatedAt: DateTime.now(),
+        );
+        final existingIndex =
+            inventoryBox.values.toList().indexWhere((i) => i.id == itemId);
+        if (existingIndex != -1) {
+          final key = inventoryBox.keyAt(existingIndex);
+          await inventoryBox.put(key, hiveItem);
+        } else {
+          await inventoryBox.add(hiveItem);
+        }
+      }
+      Navigator.of(context).pop(true);
+    } catch (error) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error saving item: $error')),
+      );
+    } finally {
+      setState(() {
+        _isSaving = false;
+      });
     }
   }
 
@@ -305,48 +294,63 @@ class _AddEditInventoryScreenState extends State<AddEditInventoryScreen> {
                       ),
                     ),
                   ),
-                  TextFormField(
-                    controller: _pcsController,
-                    decoration:
-                        const InputDecoration(labelText: 'Quantity (Pcs)'),
-                    keyboardType: TextInputType.number,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter the quantity in pcs';
-                      }
-                      if (int.tryParse(value) == null) {
-                        return 'Quantity must be a number';
-                      }
-                      return null;
-                    },
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          initialValue: _quantityValue.toString(),
+                          keyboardType: TextInputType.number,
+                          decoration:
+                              const InputDecoration(labelText: 'Quantity'),
+                          onChanged: (val) {
+                            setState(() {
+                              _quantityValue = int.tryParse(val) ?? 0;
+                            });
+                          },
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter the quantity';
+                            }
+                            if (int.tryParse(value) == null) {
+                              return 'Quantity must be a number';
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      DropdownButton<String>(
+                        value: _unit,
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'boxes', child: Text('Boxes')),
+                          DropdownMenuItem(value: 'pcs', child: Text('Pieces')),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) setState(() => _unit = v);
+                        },
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 16),
                   TextFormField(
-                    controller: _boxesController,
+                    controller: _conversionController,
                     decoration:
-                        const InputDecoration(labelText: 'Quantity (Boxes)'),
+                        const InputDecoration(labelText: '1 Box = ? Pieces'),
                     keyboardType: TextInputType.number,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter the quantity in boxes';
-                      }
-                      if (int.tryParse(value) == null) {
-                        return 'Quantity must be a number';
-                      }
-                      return null;
+                    onChanged: (v) {
+                      setState(() {
+                        _conversionFactor = int.tryParse(v) ?? 1;
+                      });
                     },
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _quantityController,
-                    decoration: const InputDecoration(labelText: 'Quantity'),
-                    keyboardType: TextInputType.number,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Please enter the quantity';
+                        return 'Please enter the conversion factor';
                       }
-                      if (int.tryParse(value) == null) {
-                        return 'Quantity must be a number';
+                      if (int.tryParse(value) == null ||
+                          int.tryParse(value)! <= 0) {
+                        return 'Conversion factor must be a positive number';
                       }
                       return null;
                     },
